@@ -26,3 +26,8 @@ Thumbs.db
 venv/
 .env/
 agent/
+
+
+# documents
+*.pdf
+extracted_round3_pdfplumber.md
