@@ -251,6 +251,96 @@ OPENROUTER_BASE_URL=http://localhost:11434/v1
 2. Reduce max_tokens in LLM calls
 3. Implement better caching strategy
 
+## 🚀 Latest Updates & New Features
+
+### Performance Optimized Versions
+
+#### `optimized_kahoot_bot.py`
+Enhanced bot with performance monitoring and optimization features:
+- **Faster LLM Configuration**: `gpt-4o-mini` with optimized settings (max_tokens=150, temperature=0.1)
+- **Real-time Performance Tracking**: Monitors response times with color-coded feedback (🟢 Fast <2s, 🟡 Medium 2-4s, 🔴 Slow >4s)
+- **Performance Statistics**: Detailed metrics including average response time, best/worst times, and speed breakdown percentages
+- **Enhanced Error Handling**: Improved retry logic with timeout protection (5-second agent timeout)
+- **Detailed Feedback**: Shows agent execution time vs. total question time for optimization insights
+
+#### `optimized_rag_tool.py`
+Advanced RAG implementation with hybrid search and caching:
+- **Hybrid Search**: `_hybrid_search()` method combines semantic similarity with keyword matching
+- **Query Expansion**: `_expand_query()` automatically adds synonyms for common question patterns (what→which, who→person, etc.)
+- **Result Reranking**: Scores results using `similarity + (keyword_matches * 0.1)` for better ranking
+- **Dual Caching System**: `_query_cache` for search results and `_keyword_cache` for expanded queries
+- **Faster Embeddings**: Uses `text-embedding-3-small` instead of `text-embedding-ada-002`
+- **Debug Mode**: `debug_query()` method with detailed retrieval analysis and keyword matching info
+
+#### `optimized_chromadb_manager.py`
+Streamlined document processing with caching and optimizations:
+- **Document Caching**: `document_cache` prevents reprocessing same files using MD5 hashing
+- **Faster Embedding Model**: `text-embedding-3-small` for quicker document indexing
+- **Optimized Chunking**: Reduced chunk size (800 chars) with increased overlap (150 chars)
+- **Version Compatibility**: Enhanced error handling for different Docling API versions
+- **Cache Statistics**: Shows cache hit rates and processing metrics
+
+### Alternative Document Processing Solutions
+
+#### `processor.py`
+Comprehensive fallback system for PDF processing when Docling fails:
+- **5 Extraction Methods**: Unstructured, pdfplumber, PyMuPDF, pdftotext (command-line), textract
+- **Priority-Based Fallback**: `methods_priority` list with automatic method switching on failure
+- **System Integration**: Checks for command-line tools (`pdftotext`) and Python libraries
+- **Content Validation**: Ensures extracted text meets minimum length requirements (>100 chars)
+- **Installation Helper**: `install_alternatives()` function with setup instructions
+
+#### `direct_import.py`
+Direct text file import bypassing PDF processing entirely:
+- **Text File Support**: Direct processing of TXT and MD files
+- **Smart Chunking**: `chunk_content()` with sentence boundary detection
+- **Batch Processing**: Uploads in batches of 25 to avoid API limits
+- **Built-in Testing**: `test_query()` function for immediate validation
+- **Metadata Preservation**: Maintains source file information and processing method
+
+### Actual Implementation Details
+
+| Component | Standard Version | Optimized Version |
+|-----------|------------------|-------------------|
+| **Embedding Model** | `text-embedding-ada-002` | `text-embedding-3-small` |
+| **Search Method** | Basic semantic search | Hybrid: `_hybrid_search()` + keyword matching |
+| **Caching** | None | Query cache + keyword cache with MD5 keys |
+| **Performance Tracking** | Basic logging | Real-time metrics with `time.time()` measurements |
+| **Error Handling** | Standard retry | 5-second timeouts + fallback systems |
+| **Chunk Size** | 1000 chars, 100 overlap | 800 chars, 150 overlap |
+
+### Key Functions Added
+
+**optimized_rag_tool.py:**
+- `_hybrid_search()` - Combines multiple search strategies
+- `_expand_query()` - Automatic query enhancement  
+- `_format_results_with_context()` - Enhanced result scoring
+- `clear_cache()` and `get_cache_stats()` - Cache management
+
+**optimized_kahoot_bot.py:**
+- `_show_performance_stats()` - Detailed performance analysis
+- `_show_final_performance_summary()` - Session statistics
+- Response time categorization and feedback
+
+**processor.py:**
+- `extract_text_best_method()` - Automatic fallback processing
+- `_extract_with_*()` methods for each processing library
+- `_check_available_methods()` - System capability detection
+
+### Usage Recommendations
+
+- **For Competitions**: Use optimized versions for better performance monitoring
+- **For M1 Mac Issues**: Use `processor.py` when Docling fails
+- **For Text Files**: Use `direct_import.py` to skip PDF processing
+- **For Debugging**: Optimized RAG tool includes detailed debug output
+
+### Performance Notes
+
+- Optimized versions target faster responses but actual speed depends on document collection size and complexity
+- Performance monitoring helps identify bottlenecks in your specific setup
+- Caching provides speed improvements for repeated queries
+- Hybrid search typically improves retrieval relevance for domain-specific questions
+
 ## Contributing
 
 1. Fork the repository
