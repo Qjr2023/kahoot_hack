@@ -31,17 +31,17 @@ class OptimizedRAGTool(BaseTool):
         if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable is not set.")
 
-        # 安全设置属性
+        # Safely set attributes
         object.__setattr__(self, "_chroma_client", chromadb.PersistentClient(path=persist_dir))
         
-        # 使用更快的嵌入模型
+        # Use faster embedding model
         openai_ef = embedding_functions.OpenAIEmbeddingFunction(
             api_key=api_key,
-            model_name="text-embedding-3-small"  # 更快更便宜
+            model_name="text-embedding-3-small"  # Faster and cheaper
         )
         object.__setattr__(self, "_embedding_function", openai_ef)
 
-        # 初始化collection
+        # Initialize collection
         object.__setattr__(self, "collection_name", collection_name)
         try:
             object.__setattr__(self, "_collection", self._chroma_client.get_collection(
@@ -52,18 +52,18 @@ class OptimizedRAGTool(BaseTool):
             print(f"Warning: Could not get collection '{collection_name}': {e}")
             object.__setattr__(self, "_collection", None)
 
-        # 初始化缓存
+        # Initialize cache
         object.__setattr__(self, "_query_cache", {})
         object.__setattr__(self, "_keyword_cache", {})
 
     def _expand_query(self, query: str) -> List[str]:
-        """扩展查询以提高检索效果"""
+        """Expand query to improve retrieval effectiveness"""
         if query in self._keyword_cache:
             return self._keyword_cache[query]
         
         expanded_queries = [query]
         
-        # 添加常见问题模式的同义词
+        # Add synonyms for common question patterns
         question_patterns = {
             'what': ['which', 'define', 'explain'],
             'who': ['person', 'individual', 'people'],
@@ -76,20 +76,20 @@ class OptimizedRAGTool(BaseTool):
         query_lower = query.lower()
         for pattern, synonyms in question_patterns.items():
             if pattern in query_lower:
-                for synonym in synonyms[:2]:  # 限制数量以保持速度
+                for synonym in synonyms[:2]:  # Limit quantity to maintain speed
                     expanded_queries.append(query.lower().replace(pattern, synonym))
         
-        # 提取关键词
+        # Extract keywords
         keywords = self._extract_keywords(query)
         if keywords:
-            expanded_queries.extend(keywords[:3])  # 只取前3个关键词
+            expanded_queries.extend(keywords[:3])  # Only take first 3 keywords
         
-        # 缓存并限制数量
+        # Cache and limit quantity
         self._keyword_cache[query] = expanded_queries[:4]
         return self._keyword_cache[query]
 
     def _extract_keywords(self, text: str) -> List[str]:
-        """提取关键词"""
+        """Extract keywords"""
         stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 
                      'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
                      'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
@@ -102,22 +102,22 @@ class OptimizedRAGTool(BaseTool):
         return keywords[:5]
 
     def _hybrid_search(self, query: str, n_results: int = 5) -> Dict[str, Any]:
-        """混合搜索：语义搜索 + 关键词搜索"""
+        """Hybrid search: semantic search + keyword search"""
         if not self._collection:
             return {"documents": [], "metadatas": [], "distances": []}
         
         try:
-            # 主要语义搜索
+            # Primary semantic search
             results = self._collection.query(
                 query_texts=[query],
-                n_results=min(n_results * 2, 10),  # 获取更多结果用于重排
+                n_results=min(n_results * 2, 10),  # Get more results for reranking
                 include=['documents', 'metadatas', 'distances']
             )
             
-            # 如果结果不足，尝试扩展查询
+            # If results are insufficient, try expanded queries
             if not results.get("documents") or not results["documents"][0] or len(results["documents"][0]) < n_results:
                 expanded_queries = self._expand_query(query)
-                for exp_query in expanded_queries[1:3]:  # 尝试2个扩展查询
+                for exp_query in expanded_queries[1:3]:  # Try 2 expanded queries
                     try:
                         exp_results = self._collection.query(
                             query_texts=[exp_query],
@@ -126,7 +126,7 @@ class OptimizedRAGTool(BaseTool):
                         )
                         
                         if exp_results.get("documents") and exp_results["documents"][0]:
-                            # 简单合并结果
+                            # Simple result merging
                             if results.get("documents") and results["documents"][0]:
                                 results["documents"][0].extend(exp_results["documents"][0])
                                 results["metadatas"][0].extend(exp_results["metadatas"][0]) 
@@ -137,7 +137,7 @@ class OptimizedRAGTool(BaseTool):
                     except:
                         continue
             
-            # 去重并取前n_results个
+            # Deduplicate and take top n_results
             if results.get("documents") and results["documents"][0]:
                 seen = set()
                 unique_docs = []
@@ -163,7 +163,7 @@ class OptimizedRAGTool(BaseTool):
             
         except Exception as e:
             print(f"Hybrid search error: {e}")
-            # 回退到基础搜索
+            # Fallback to basic search
             try:
                 return self._collection.query(
                     query_texts=[query],
@@ -174,7 +174,7 @@ class OptimizedRAGTool(BaseTool):
                 return {"documents": [], "metadatas": [], "distances": []}
 
     def _format_results_with_context(self, results: Dict[str, Any], query: str) -> List[str]:
-        """增强的结果格式化，添加权重评分"""
+        """Enhanced result formatting with weighted scoring"""
         docs_with_metadata = []
         
         if not results.get("documents") or not results["documents"][0]:
@@ -182,7 +182,7 @@ class OptimizedRAGTool(BaseTool):
         
         query_keywords = set(self._extract_keywords(query))
         
-        # 为结果添加权重评分并排序
+        # Add weighted scoring and sort results
         scored_results = []
         for i in range(len(results["documents"][0])):
             doc_content = results["documents"][0][i]
@@ -190,33 +190,33 @@ class OptimizedRAGTool(BaseTool):
             distance = results["distances"][0][i]
             similarity = 1 - distance
             
-            # 计算关键词匹配加分
+            # Calculate keyword matching bonus
             content_keywords = set(self._extract_keywords(doc_content.lower()))
             keyword_matches = len(query_keywords.intersection(content_keywords))
             
-            # 综合评分：语义相似度 + 关键词匹配
+            # Comprehensive score: semantic similarity + keyword matching
             total_score = similarity + (keyword_matches * 0.1)
             
             scored_results.append((total_score, doc_content, doc_metadata, similarity))
         
-        # 按总分排序
+        # Sort by total score
         scored_results.sort(key=lambda x: x[0], reverse=True)
         
-        # 格式化排序后的结果
+        # Format sorted results
         for i, (score, doc_content, doc_metadata, similarity) in enumerate(scored_results):
             relevance = "🟢 High" if similarity > 0.8 else "🟡 Medium" if similarity > 0.6 else "🔴 Low"
             
-            # 检查关键词匹配
+            # Check keyword matching
             content_keywords = set(self._extract_keywords(doc_content.lower()))
             matching_keywords = query_keywords.intersection(content_keywords)
             keyword_info = f" [Keywords: {', '.join(matching_keywords)}]" if matching_keywords else ""
             
-            # 提取元数据
+            # Extract metadata
             source_info = doc_metadata.get('source', 'Unknown')
             page_info = doc_metadata.get('page', 'N/A')
             doc_type = doc_metadata.get('type', 'content')
             
-            # 格式化结果（排名第一的结果更突出）
+            # Format result (top-ranked result more prominent)
             rank_indicator = "🏆" if i == 0 else f"{i+1}."
             
             formatted_result = (
@@ -234,15 +234,15 @@ class OptimizedRAGTool(BaseTool):
         return docs_with_metadata
 
     def _run(self, query: str, n_results: int = 5, collection_name: str = None) -> List[str]:
-        """增强的查询执行 - 添加详细调试信息"""
+        """Enhanced query execution - adding detailed debug information"""
         start_time = time.time()
         
-        # 添加详细调试输出
+        # Add detailed debug output
         print(f"\n🔍 RAG DEBUG INFO:")
         print(f"   📝 Query: '{query[:100]}{'...' if len(query) > 100 else ''}' ({len(query)} chars)")
         print(f"   🎯 Searching for {n_results} results in collection: {self.collection_name}")
         
-        # 缓存检查
+        # Cache check
         cache_key = f"{query}_{n_results}_{collection_name or self.collection_name}"
         if cache_key in self._query_cache:
             print(f"   ⚡ Cache hit! Time: {time.time() - start_time:.3f}s")
@@ -255,13 +255,13 @@ class OptimizedRAGTool(BaseTool):
             return error_msg
 
         try:
-            # 执行混合搜索
+            # Execute hybrid search
             results = self._hybrid_search(query, n_results)
             
-            # 调试：显示原始搜索结果
+            # Debug: show raw search results
             if results.get("documents") and results["documents"][0]:
                 print(f"   ✅ Found {len(results['documents'][0])} raw results")
-                # 显示最佳结果的详细信息
+                # Show detailed information of best result
                 best_doc = results["documents"][0][0]
                 best_similarity = 1 - results["distances"][0][0]
                 best_source = results["metadatas"][0][0].get('source', 'Unknown')
@@ -272,7 +272,7 @@ class OptimizedRAGTool(BaseTool):
                 print(f"      📄 Content: '{best_doc[:150]}{'...' if len(best_doc) > 150 else ''}'")
                 print(f"      📁 Source: {best_source} (Page: {best_page})")
                 
-                # 显示关键词匹配情况
+                # Show keyword matching situation
                 query_keywords = set(self._extract_keywords(query))
                 content_keywords = set(self._extract_keywords(best_doc.lower()))
                 matching_keywords = query_keywords.intersection(content_keywords)
@@ -288,10 +288,10 @@ class OptimizedRAGTool(BaseTool):
                 print(f"      - Using different keywords")
                 print(f"      - Checking if the information exists in the collection")
             
-            # 格式化结果
+            # Format results
             formatted_results = self._format_results_with_context(results, query)
             
-            # 缓存结果
+            # Cache results
             self._query_cache[cache_key] = formatted_results
             
             query_time = time.time() - start_time
@@ -312,12 +312,12 @@ class OptimizedRAGTool(BaseTool):
                 f"Please check collection and try again."
             ]
             
-            # 缓存错误以防重复
+            # Cache error to prevent repetition
             self._query_cache[cache_key] = error_results
             return error_results
 
     def clear_cache(self):
-        """清除缓存"""
+        """Clear cache"""
         old_query_size = len(self._query_cache)
         old_keyword_size = len(self._keyword_cache)
         
@@ -327,7 +327,7 @@ class OptimizedRAGTool(BaseTool):
         print(f"🧹 Cache cleared: {old_query_size} queries, {old_keyword_size} keywords")
 
     def get_cache_stats(self) -> Dict[str, int]:
-        """获取缓存统计"""
+        """Get cache statistics"""
         return {
             "query_cache_size": len(self._query_cache),
             "keyword_cache_size": len(self._keyword_cache),
@@ -335,7 +335,7 @@ class OptimizedRAGTool(BaseTool):
         }
 
     def debug_query(self, query: str) -> Dict[str, Any]:
-        """专门用于调试的查询方法"""
+        """Query method specifically for debugging"""
         print(f"\n🔬 DETAILED DEBUG FOR QUERY: '{query}'")
         print("="*60)
         
@@ -343,14 +343,14 @@ class OptimizedRAGTool(BaseTool):
             return {"error": "No collection available"}
         
         try:
-            # 1. 显示原始查询分析
+            # 1. Show original query analysis
             keywords = self._extract_keywords(query)
             expanded = self._expand_query(query)
             print(f"📝 Original query: '{query}'")
             print(f"🔑 Extracted keywords: {keywords}")
             print(f"📈 Expanded queries: {expanded}")
             
-            # 2. 执行搜索并显示详细结果
+            # 2. Execute search and show detailed results
             results = self._collection.query(
                 query_texts=[query],
                 n_results=10,
@@ -369,7 +369,7 @@ class OptimizedRAGTool(BaseTool):
                     print(f"   Content: '{doc[:200]}...'")
                     print(f"   Source: {meta.get('source', 'Unknown')} (Page: {meta.get('page', 'N/A')})")
                     
-                    # 检查关键词匹配
+                    # Check keyword matching
                     content_keywords = set(self._extract_keywords(doc.lower()))
                     query_keywords = set(keywords)
                     matches = query_keywords.intersection(content_keywords)

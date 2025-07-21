@@ -1,6 +1,6 @@
 """
-Fixed Optimized ChromaDB Manager - 基于原版的优化
-直接复制这个代码替换 optimized_chromadb_manager.py
+Fixed Optimized ChromaDB Manager - Optimization based on original version
+Copy this code directly to replace optimized_chromadb_manager.py
 """
 
 import os
@@ -25,28 +25,28 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 class OptimizedDoclingChromaProcessor:
     """
-    优化的处理器，保持与原版兼容的接口
+    Optimized processor that maintains interface compatibility with the original version
     """
     
     def __init__(self,
                  openai_api_key: str = None,
                  chroma_db_path: str = "./chroma_db",
-                 embedding_model: str = "text-embedding-3-small"):  # 更快的嵌入模型
+                 embedding_model: str = "text-embedding-3-small"):  # Faster embedding model
         
         self.openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
         self.chroma_db_path = chroma_db_path
         self.embedding_model = embedding_model
         
-        # 使用原版的初始化方式，只是优化参数
+        # Use original initialization method, just optimize parameters
         self.converter = self._setup_docling_converter()
         self.chroma_client = chromadb.PersistentClient(path=self.chroma_db_path)
         self.embedding_function = self._setup_embedding_function()
         
-        # 添加缓存
+        # Add caching
         self.document_cache = {}
 
     def _setup_docling_converter(self) -> DocumentConverter:
-        """与原版相同的设置方式"""
+        """Same setup method as original version"""
         pdf_options = PdfPipelineOptions()
         pdf_options.do_ocr = True
         pdf_options.do_table_structure = True
@@ -60,17 +60,17 @@ class OptimizedDoclingChromaProcessor:
         return converter
 
     def _setup_embedding_function(self):
-        """优化的嵌入函数 - 使用更快的模型"""
+        """Optimized embedding function - using faster model"""
         if not self.openai_api_key:
             raise ValueError("OPENAI_API_KEY environment variable is not set.")
         return embedding_functions.OpenAIEmbeddingFunction(
             api_key=self.openai_api_key,
-            model_name=self.embedding_model  # 这是主要优化点
+            model_name=self.embedding_model  # This is the main optimization point
         )
 
     def extract_text_with_docling(self, file_path: str) -> Dict[str, Any]:
-        """修复版本兼容性问题"""
-        # 添加简单的缓存
+        """Fixed version compatibility issues"""
+        # Add simple caching
         file_hash = self._get_file_hash(file_path)
         if file_hash in self.document_cache:
             print(f"⚡ Using cached extraction for {Path(file_path).name}")
@@ -81,10 +81,10 @@ class OptimizedDoclingChromaProcessor:
             result = self.converter.convert(file_path)
             processing_time = time.time() - start_time
 
-            # 修复: 只获取markdown内容，避免版本兼容问题
+            # Fix: Only get markdown content, avoid version compatibility issues
             markdown_content = result.document.export_to_markdown()
             
-            # 尝试获取JSON，如果失败就跳过
+            # Try to get JSON, skip if failed
             json_content = None
             try:
                 if hasattr(result.document, 'export_to_json'):
@@ -97,8 +97,8 @@ class OptimizedDoclingChromaProcessor:
                 print(f"ℹ️ JSON export failed: {json_error}")
                 json_content = None
 
-            # 安全获取title
-            title = Path(file_path).name  # 默认值
+            # Safe title retrieval
+            title = Path(file_path).name  # Default value
             if hasattr(result.document, 'title') and result.document.title:
                 title = result.document.title
             elif hasattr(result, 'title') and result.title:
@@ -123,7 +123,7 @@ class OptimizedDoclingChromaProcessor:
                 "document_object": result.document
             }
             
-            # 缓存结果
+            # Cache results
             self.document_cache[file_hash] = extracted_data
             print(f"✅ Document extracted in {processing_time:.2f}s ({metadata['word_count']} words)")
             return extracted_data
@@ -134,7 +134,7 @@ class OptimizedDoclingChromaProcessor:
             return None
 
     def _get_file_hash(self, file_path: str) -> str:
-        """生成文件哈希用于缓存"""
+        """Generate file hash for caching"""
         try:
             with open(file_path, 'rb') as f:
                 return hashlib.md5(f.read()).hexdigest()
@@ -142,19 +142,19 @@ class OptimizedDoclingChromaProcessor:
             return hashlib.md5(str(file_path).encode()).hexdigest()
     
     def _count_tables(self, document) -> int:
-        """兼容版本的表格计数"""
+        """Version compatible table counting"""
         try:
             if hasattr(document, 'body') and hasattr(document.body, 'items'):
                 return len([item for item in document.body.items if hasattr(item, 'label') and item.label == 'table'])
             else:
-                # 尝试其他可能的属性名
+                # Try other possible attribute names
                 return 0
         except Exception as e:
             print(f"ℹ️ Cannot count tables: {e}")
             return 0
     
     def _count_images(self, document) -> int:
-        """兼容版本的图片计数"""
+        """Version compatible image counting"""
         try:
             if hasattr(document, 'body') and hasattr(document.body, 'items'):
                 return len([item for item in document.body.items if hasattr(item, 'label') and item.label == 'picture'])
@@ -165,7 +165,7 @@ class OptimizedDoclingChromaProcessor:
             return 0
 
     def create_or_get_collection(self, collection_name: str):
-        """与原版相同的接口"""
+        """Same interface as original version"""
         collection = self.chroma_client.get_or_create_collection(
             name=collection_name,
             embedding_function=self.embedding_function
@@ -174,7 +174,7 @@ class OptimizedDoclingChromaProcessor:
         return collection
     
     def chunk_content(self, content: str, chunk_size: int = 800, overlap: int = 150) -> List[str]:
-        """优化的分块 - 稍微小一点的chunk和更多overlap"""
+        """Optimized chunking - slightly smaller chunks with more overlap"""
         chunks = []
         start = 0
         
@@ -198,7 +198,7 @@ class OptimizedDoclingChromaProcessor:
     
     def embed_document(self, collection_name: str, file_path: str,
                       chunk_size: int = 800, overlap: int = 150) -> bool:
-        """与原版兼容，但使用优化参数"""
+        """Compatible with original version, but using optimized parameters"""
         if not os.path.isfile(file_path):
             print(f"❌ File not found: {file_path}")
             return False
@@ -243,17 +243,17 @@ class OptimizedDoclingChromaProcessor:
             print(f"❌ Failed to add document: {e}")
             return False
 
-# 复用原版的交互界面类
+# Reuse original interactive interface class
 class InteractiveKnowledgeBase:
     def __init__(self):
-        # 使用优化的处理器，但保持相同接口
+        # Use optimized processor but maintain same interface
         self.processor = OptimizedDoclingChromaProcessor()
         self.current_collection = None
     
     def run(self):
-        """完全相同的交互界面"""
-        print("=== 优化版 Docling + ChromaDB Knowledge Base Manager ===")
-        print("🚀 性能优化: 启用更快的嵌入模型和缓存")
+        """Exactly the same interactive interface"""
+        print("=== Optimized Docling + ChromaDB Knowledge Base Manager ===")
+        print("🚀 Performance optimizations: Enabled faster embedding model and caching")
         
         while True:
             print("\nOptions:")
@@ -332,7 +332,7 @@ class InteractiveKnowledgeBase:
             print("Please select a collection first")
             return
         
-        # 这里暂时使用简单查询，可以后续优化
+        # Use simple query here for now, can optimize later
         query = input("Enter your query: ").strip()
         if query:
             try:
@@ -343,7 +343,7 @@ class InteractiveKnowledgeBase:
                 
                 results = collection.query(
                     query_texts=[query],
-                    n_results=5  # 优化: 从3改为5
+                    n_results=5  # Optimization: changed from 3 to 5
                 )
                 
                 print(f"\nFound {len(results['documents'][0])} results:")
@@ -387,7 +387,7 @@ class InteractiveKnowledgeBase:
                 except Exception as e:
                     print(f"Error: {e}")
 
-# 重要: 必须有这个主程序入口!
+# Important: Must have this main program entry point!
 if __name__ == "__main__":
     print("🚀 Starting Optimized ChromaDB Manager...")
     manager = InteractiveKnowledgeBase()

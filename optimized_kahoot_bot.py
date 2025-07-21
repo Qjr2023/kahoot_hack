@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Optimized CrewAI Flow-based Kahoot Bot with performance enhancements
-优化版CrewAI Flow Kahoot机器人，具有性能增强功能
+Optimized CrewAI Flow Kahoot Bot with performance enhancement features
 """
 
 import os
@@ -14,7 +14,7 @@ from crewai_tools import MCPServerAdapter
 from mcp import StdioServerParameters
 from dotenv import load_dotenv
 
-# 修复导入 - 先尝试优化版本，如果失败则使用原版
+# Fix imports - try optimized version first, fallback to original if failed
 try:
     from optimized_rag_tool import OptimizedRAGTool as RAGTool
     print("✅ Using optimized RAG tool")
