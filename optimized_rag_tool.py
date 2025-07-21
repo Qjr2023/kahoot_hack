@@ -21,8 +21,7 @@ class OptimizedRAGTool(BaseTool):
         "An optimized Retrieval-Augmented Generation (RAG) tool with hybrid retrieval for faster and more accurate results. "
         "Features: 1) Semantic + Keyword hybrid search, 2) Query expansion, 3) Result reranking, 4) Caching for speed."
     )
-    # 修复: 添加类型注解
-    args_schema: Type[BaseModel] = RAGToolInput
+    args_schema: type[RAGToolInput] = RAGToolInput
 
     def __init__(self, collection_name: str, db_path: str = "chroma.sqlite3"):
         super().__init__()
@@ -175,7 +174,7 @@ class OptimizedRAGTool(BaseTool):
                 return {"documents": [], "metadatas": [], "distances": []}
 
     def _format_results_with_context(self, results: Dict[str, Any], query: str) -> List[str]:
-        """格式化结果，增加上下文信息"""
+        """增强的结果格式化，添加权重评分"""
         docs_with_metadata = []
         
         if not results.get("documents") or not results["documents"][0]:
@@ -183,13 +182,28 @@ class OptimizedRAGTool(BaseTool):
         
         query_keywords = set(self._extract_keywords(query))
         
+        # 为结果添加权重评分并排序
+        scored_results = []
         for i in range(len(results["documents"][0])):
             doc_content = results["documents"][0][i]
             doc_metadata = results["metadatas"][0][i]
             distance = results["distances"][0][i]
-            
-            # 计算相关性
             similarity = 1 - distance
+            
+            # 计算关键词匹配加分
+            content_keywords = set(self._extract_keywords(doc_content.lower()))
+            keyword_matches = len(query_keywords.intersection(content_keywords))
+            
+            # 综合评分：语义相似度 + 关键词匹配
+            total_score = similarity + (keyword_matches * 0.1)
+            
+            scored_results.append((total_score, doc_content, doc_metadata, similarity))
+        
+        # 按总分排序
+        scored_results.sort(key=lambda x: x[0], reverse=True)
+        
+        # 格式化排序后的结果
+        for i, (score, doc_content, doc_metadata, similarity) in enumerate(scored_results):
             relevance = "🟢 High" if similarity > 0.8 else "🟡 Medium" if similarity > 0.6 else "🔴 Low"
             
             # 检查关键词匹配
@@ -202,10 +216,12 @@ class OptimizedRAGTool(BaseTool):
             page_info = doc_metadata.get('page', 'N/A')
             doc_type = doc_metadata.get('type', 'content')
             
-            # 格式化结果
+            # 格式化结果（排名第一的结果更突出）
+            rank_indicator = "🏆" if i == 0 else f"{i+1}."
+            
             formatted_result = (
-                f"📄 **Content:** {doc_content}\n"
-                f"🔍 **Relevance:** {relevance} ({similarity:.3f})\n"
+                f"📄 **{rank_indicator} Content:** {doc_content}\n"
+                f"🔍 **Relevance:** {relevance} ({similarity:.3f}) Score: {score:.3f}\n"
                 f"📁 **Source:** {source_info}\n"
                 f"📖 **Page:** {page_info}\n"
                 f"🏷️ **Type:** {doc_type}"
@@ -218,23 +234,59 @@ class OptimizedRAGTool(BaseTool):
         return docs_with_metadata
 
     def _run(self, query: str, n_results: int = 5, collection_name: str = None) -> List[str]:
-        """优化的查询执行"""
+        """增强的查询执行 - 添加详细调试信息"""
         start_time = time.time()
+        
+        # 添加详细调试输出
+        print(f"\n🔍 RAG DEBUG INFO:")
+        print(f"   📝 Query: '{query[:100]}{'...' if len(query) > 100 else ''}' ({len(query)} chars)")
+        print(f"   🎯 Searching for {n_results} results in collection: {self.collection_name}")
         
         # 缓存检查
         cache_key = f"{query}_{n_results}_{collection_name or self.collection_name}"
         if cache_key in self._query_cache:
-            print(f"⚡ Cache hit! Query time: {time.time() - start_time:.3f}s")
+            print(f"   ⚡ Cache hit! Time: {time.time() - start_time:.3f}s")
             return self._query_cache[cache_key]
         
         if not self._collection:
             error_msg = ["❌ Error: No collection available for query."]
+            print(f"   ❌ No collection available!")
             self._query_cache[cache_key] = error_msg
             return error_msg
 
         try:
             # 执行混合搜索
             results = self._hybrid_search(query, n_results)
+            
+            # 调试：显示原始搜索结果
+            if results.get("documents") and results["documents"][0]:
+                print(f"   ✅ Found {len(results['documents'][0])} raw results")
+                # 显示最佳结果的详细信息
+                best_doc = results["documents"][0][0]
+                best_similarity = 1 - results["distances"][0][0]
+                best_source = results["metadatas"][0][0].get('source', 'Unknown')
+                best_page = results["metadatas"][0][0].get('page', 'N/A')
+                
+                print(f"   🎯 Best match:")
+                print(f"      📊 Similarity: {best_similarity:.3f}")
+                print(f"      📄 Content: '{best_doc[:150]}{'...' if len(best_doc) > 150 else ''}'")
+                print(f"      📁 Source: {best_source} (Page: {best_page})")
+                
+                # 显示关键词匹配情况
+                query_keywords = set(self._extract_keywords(query))
+                content_keywords = set(self._extract_keywords(best_doc.lower()))
+                matching_keywords = query_keywords.intersection(content_keywords)
+                if matching_keywords:
+                    print(f"      🔑 Matching keywords: {', '.join(matching_keywords)}")
+                else:
+                    print(f"      🔑 No exact keyword matches (semantic similarity)")
+                
+            else:
+                print(f"   ❌ No results found!")
+                print(f"   💡 Try:")
+                print(f"      - Rephrasing the question")
+                print(f"      - Using different keywords")
+                print(f"      - Checking if the information exists in the collection")
             
             # 格式化结果
             formatted_results = self._format_results_with_context(results, query)
@@ -243,15 +295,21 @@ class OptimizedRAGTool(BaseTool):
             self._query_cache[cache_key] = formatted_results
             
             query_time = time.time() - start_time
-            print(f"🚀 Query completed in {query_time:.3f}s (Found {len(formatted_results)} results)")
+            print(f"   ⏱️ Total RAG time: {query_time:.3f}s")
+            print(f"   📦 Returning {len(formatted_results)} formatted results")
             
             return formatted_results
             
         except Exception as e:
             import traceback
+            query_time = time.time() - start_time
+            print(f"   ❌ RAG Error: {e}")
+            print(f"   📍 Error location: {traceback.format_exc().split('File')[-1] if traceback.format_exc() else 'Unknown'}")
+            
             error_results = [
                 f"❌ Error querying ChromaDB: {e}",
-                f"Query time: {time.time() - start_time:.3f}s"
+                f"Query time: {query_time:.3f}s",
+                f"Please check collection and try again."
             ]
             
             # 缓存错误以防重复
@@ -260,13 +318,65 @@ class OptimizedRAGTool(BaseTool):
 
     def clear_cache(self):
         """清除缓存"""
+        old_query_size = len(self._query_cache)
+        old_keyword_size = len(self._keyword_cache)
+        
         self._query_cache.clear()
         self._keyword_cache.clear()
-        print("🧹 All caches cleared")
+        
+        print(f"🧹 Cache cleared: {old_query_size} queries, {old_keyword_size} keywords")
 
     def get_cache_stats(self) -> Dict[str, int]:
         """获取缓存统计"""
         return {
             "query_cache_size": len(self._query_cache),
             "keyword_cache_size": len(self._keyword_cache),
+            "collection_name": self.collection_name
         }
+
+    def debug_query(self, query: str) -> Dict[str, Any]:
+        """专门用于调试的查询方法"""
+        print(f"\n🔬 DETAILED DEBUG FOR QUERY: '{query}'")
+        print("="*60)
+        
+        if not self._collection:
+            return {"error": "No collection available"}
+        
+        try:
+            # 1. 显示原始查询分析
+            keywords = self._extract_keywords(query)
+            expanded = self._expand_query(query)
+            print(f"📝 Original query: '{query}'")
+            print(f"🔑 Extracted keywords: {keywords}")
+            print(f"📈 Expanded queries: {expanded}")
+            
+            # 2. 执行搜索并显示详细结果
+            results = self._collection.query(
+                query_texts=[query],
+                n_results=10,
+                include=['documents', 'metadatas', 'distances']
+            )
+            
+            if results.get("documents") and results["documents"][0]:
+                print(f"\n📊 Found {len(results['documents'][0])} results:")
+                for i, (doc, meta, dist) in enumerate(zip(
+                    results["documents"][0][:5], 
+                    results["metadatas"][0][:5], 
+                    results["distances"][0][:5]
+                )):
+                    similarity = 1 - dist
+                    print(f"\n{i+1}. Similarity: {similarity:.3f}")
+                    print(f"   Content: '{doc[:200]}...'")
+                    print(f"   Source: {meta.get('source', 'Unknown')} (Page: {meta.get('page', 'N/A')})")
+                    
+                    # 检查关键词匹配
+                    content_keywords = set(self._extract_keywords(doc.lower()))
+                    query_keywords = set(keywords)
+                    matches = query_keywords.intersection(content_keywords)
+                    print(f"   Keywords: {', '.join(matches) if matches else 'No exact matches'}")
+            
+            return {"status": "success", "results_count": len(results["documents"][0]) if results.get("documents") else 0}
+            
+        except Exception as e:
+            print(f"❌ Debug error: {e}")
+            return {"error": str(e)}
